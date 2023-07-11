@@ -5,7 +5,7 @@ import {
     OZONE_SERVICE_ENGINE,
 } from "./constants.ts";
 
-interface ServiceDefinition {
+export interface ServiceDefinition {
     name: string,
     hostname: string,
 }

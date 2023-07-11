@@ -1,10 +1,12 @@
 import { log } from './deps.ts';
 
+// We probably don't need this
+
 import {
     OZONE_SECRET_NAME,
 } from "./constants.ts";
 
-interface OzoneCoreConfiguration {
+export interface OzoneCoreConfiguration {
     socketPort: number,
     secret: string,
 }
@@ -13,7 +15,7 @@ interface OzoneCoreConfiguration {
  * Load a container secret from disk
  * @param secretName
  */
-const loadSecretFromFilesystem = secretName => Deno.readTextFile(`/run/secrets/${secretName}`);
+const loadSecretFromFilesystem = (secretName : string) => Deno.readTextFile(`/run/secrets/${secretName}`);
 
 export async function loadOzoneConfiguration() : Promise<OzoneCoreConfiguration>{
     const logger = log.getLogger('init');

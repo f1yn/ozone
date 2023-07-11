@@ -1,3 +1,4 @@
+import { send, sendBatch } from "@o3/artery/src/artery.ts";
 import { loadOzonePrerequisites } from "./loadPrereq.ts";
 import { loadOzoneConfiguration } from './loadConfiguration.ts';
 import { loadServicesFromFile } from './loadServices.ts';
@@ -25,19 +26,22 @@ const coreQueue = initializeCoreQueue({
     serviceDefinitionMap,
     // the Ozone configuration
     ozoneConfig,
-}, async function outgoingEventHandler(allEventsToSend, arteryAccessor) {
+}, async function outgoingEventHandler(allEventsToSend, arterialMap) {
     // This function gets called whenever an event is intended to be sent to a single service
-    // If it fails to send to a specific service, the queue will automatically schedule it to be sent again
+    // If it fails to send to a specific service, the queue will automatically schedule it to be sent again    
     const eventIsHeartbeat = allEventsToSend[0].intent === 'HEARTBEAT';
 
-    // the artery is the channel which we receive and send events
-    const artery = eventIsHeartbeat ?
-        // If we are sending out a heartbeat, attempt to establish a connection (which gets saved by the queue)
-        (await arteryAccessor.getOrActivate()) :
-        // Get the existing artery (if active, otherwise null)
-        (await arteryAccessor.getOnlyIfActive());
+    const artery = arterialMap.get(allEventsToSend[0].arteryName)!;
 
-    if (!artery) {
+    // the artery is the channel which we receive and send events
+    const arterySocket = eventIsHeartbeat ?
+        // If we are sending out a heartbeat, attempt to establish a connection (which gets saved by the queue)
+        (await artery.getSocketOrActivate()) :
+        // Get the existing artery (if active, otherwise null)
+        (await artery.getSocketOnlyIfActive());
+
+
+    if (!arterySocket) {
         // If we can't establish a heartbeat yet, wait for the next opportunity
         if (eventIsHeartbeat) {
             return true;
@@ -50,8 +54,11 @@ const coreQueue = initializeCoreQueue({
 
     try {
         // send event(s) in either single or batch mode
-        const moreThanOneEventToSend = allEventsToSend.length > 1;
-        await artery[moreThanOneEventToSend ? 'sendBatch' : 'send'](allEventsToSend);
+        if (allEventsToSend.length > 1) {
+            send(arterySocket, allEventsToSend, { isBatch: true, waitForAck: eventIsHeartbeat })
+        } else {
+            send(arterySocket, allEventsToSend, { waitForAck: eventIsHeartbeat })
+        }
     } catch (websocketError) {
         // We NEED to be really careful here. Ozone will ONLY backlog events if the connection is faulty, not if the service
         // is badly handling receipts. It's not the core's job to compensate if a service it's publishing can receive connections,

@@ -17,3 +17,8 @@ export const OZONE_SERVICE_ENGINE = 'compose';
  * The minimum interval to create a heartbeat
  */
 export const OZONE_HEARTBEAT_INTERVAL_MS = 3000;
+
+/**
+ * The ozone service port
+ */
+export const OZONE_SOCKET_PORT = 1122;

@@ -12,18 +12,10 @@ async function prettyPrintOzoneLogo() {
 
     // get the ozoneTextLogo
     for (const line of getOzoneTextLogo().split('\n')) {
-        let trimLine = line.trim();
         let formattedLine = line;
 
         if ([1, 2, 26, 27].includes(lineIndex)) {
-            // these lines are always green
             formattedLine = colors.green(formattedLine);
-      /*  } else if (lineIndex > 5 && lineIndex < 24) {
-            formattedLine = line
-                // borrowed from the v1 Ozone implementation
-                .replace(/([X0OK]{2}|[X0OK]{1})[xk]{1,}[xk]([KOX0])([KX]|)/g, (match) => {
-                    return colors.green(match);
-                })*/
         } else {
             formattedLine = line
                 // borrowed from the v1 Ozone implementation
