@@ -1,4 +1,4 @@
-import { yaml, log } from './deps.ts';
+import { yaml, log } from '@o3/deps.ts';
 
 import {
     OZONE_SECRET_NAME,
@@ -10,7 +10,7 @@ export interface ServiceDefinition {
     hostname: string,
 }
 
-export type ServiceDefinitionMap = Map<key, ServiceDefinition>;
+export type ServiceDefinitionMap = Map<string, ServiceDefinition>;
 
 /**
  * Checks a parser secrets key from a service compose file and verifies it contains at least one valid

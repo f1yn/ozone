@@ -2,9 +2,17 @@
  * Load in and initialize any code that needs to be run before the Ozone core init happens (like logger configuration)
  */
 
-import { log, colors } from './deps.ts';
+import { log, colors } from '@o3/deps.ts';
 import { getOzoneTextLogo } from '@o3/docs/logos/logo.ts';
 
+import {
+    OZONE_SECRET_NAME,
+} from "./constants.ts";
+
+/**
+ * Loads and writes the local ozone logo to stdout. Used a a way to determine if we're using a full git tree,
+ * as people trying to "shave the fat" will likely drop @o3/docs
+ */
 async function prettyPrintOzoneLogo() {
     // create text encoder
     const textEncoder = new TextEncoder();
@@ -29,7 +37,7 @@ async function prettyPrintOzoneLogo() {
     }
 }
 
-export async function loadOzonePrerequisites() {
+export async function setupOzoneLogging() {
     // Init logger
     const defaultLoggingLevel = 'DEBUG'
 
@@ -49,7 +57,7 @@ export async function loadOzonePrerequisites() {
                 level: defaultLoggingLevel,
                 handlers: ["console"],
             },
-            event: {
+            intent: {
                 level: defaultLoggingLevel,
                 handlers: ["console"],
             },
@@ -59,7 +67,14 @@ export async function loadOzonePrerequisites() {
             },
         },
     });
+}
 
+/**
+ * Sets up one-off and singleton dependencies (such as Deno logging)
+ * @returns 
+ */
+export async function loadOzonePrerequisites() {
+    await setupOzoneLogging();
     const initLogger = log.getLogger('init');
 
     // Pretty-print the ozone logo
@@ -80,4 +95,32 @@ export async function loadOzonePrerequisites() {
     }
 
     return [initLogger];
+}
+
+/**
+ * Load a container secret from disk (works on Docker and Podman)
+ * @param secretName
+ */
+const loadSecretFromFilesystem = (secretName : string) => Deno.readTextFile(`/run/secrets/${secretName}`);
+
+export interface OzoneCoreConfiguration {
+    socketPort: number,
+    secret: string,
+}
+
+/**
+ * Loads all init configuration needed for the core init (such as the service secret, port)
+ * @returns 
+ */
+export async function loadOzoneConfiguration() : Promise<OzoneCoreConfiguration>{
+    const logger = log.getLogger('init');
+
+    logger.debug('Attempting to load secret from filesystem');
+    const secret = await loadSecretFromFilesystem(OZONE_SECRET_NAME);
+    logger.debug('Secret was successfully loaded from filesystem');
+
+    return {
+        secret,
+        socketPort: 1122,
+    }
 }

@@ -1,5 +1,9 @@
-import { createQueueFromArterialMap, ArterialMap, QueueEvent } from '@o3/artery/src/queue.ts';
+import { createQueueFromArterialMap, QueueEvent } from '@o3/artery/queue.ts';
+import { setupOzoneLogging } from '@o3/core/loadPrereq.ts';
+import { send as arterialSend, ArterialMap } from '@o3/artery/artery.ts';
 import { getCurrentSocket, initServerServiceLoop, intentEmitter } from './server.ts';
+
+await setupOzoneLogging();
 
 /**
  * Ozone service implementation (deno)
@@ -19,9 +23,14 @@ const o3Queue = createQueueFromArterialMap({
     async outgoingEventHandler(eventsToSend) {
         // Only returns a truthy value when a socket is available
         const arterySocket = getCurrentSocket();
-        console.log(arterySocket);
-    
-        return false;
+
+        if (!arterySocket) {
+            // Skip processing if the artery isn't active. Will propagate on next event send
+            return false;
+        }
+
+        await arterialSend(arterySocket, eventsToSend, {});    
+        return true;
     }
 });
 
@@ -42,9 +51,9 @@ function send(intentName: string, data: any) {
 /**
  * 
  */
-async function createService() {
+async function createService(initialState: any) {
     // Implement timeout here
-    await initServerServiceLoop();
+    await initServerServiceLoop(initialState);
     console.log('I am connected with the core!');
 }
 

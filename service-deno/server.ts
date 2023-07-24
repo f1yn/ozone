@@ -23,51 +23,66 @@ const internal: ServiceInternalServer = {
  * @param onInitialConnect 
  * @returns 
  */
-function activeServerOrFail(secret: string, onInitialConnect: () => void): Promise<null> {
+async function activeServerOrFail(secret: string, onInitialConnect: () => void): Promise<null> {
     // TODO: Enforce secret
     const [serverPromise, resolveServerPromise] = createFlatPromise<null>();
     const handler = createMessageReceiver();
-
-    http.serve((req) => {
-        // Wait for upgrade
-        if (req.headers.get("upgrade") != "websocket") {
-            return new Response(null, { status: 501 });
-        }
-        // If the upgrade was requested, try and do that
-        const { socket, response } = Deno.upgradeWebSocket(req);
-
-        socket.addEventListener("open", () => {
-            // TODO: Should we handle this case (core should not open more than one socket at a time)
-            if (internal.currentSocket) return;
-            // Set ref
-            internal.currentSocket = socket;
-            // If it's the first time we've connected, our parent needs to resolved while we still run
-            if (!internal.firstConnectionWasEstablished) {
-                internal.firstConnectionWasEstablished = true;
-                onInitialConnect();
-            }
-        });
-
-        socket.addEventListener('close', () => {
-            // Unset the currentSocket ref
-            internal.currentSocket = null;
-            // Since we only resolve when the socket closes, this would be now
-            resolveServerPromise(null);
-        });
-
-        // Add receiver
-        socket.addEventListener("message", handler.handleIncomingPayload);
-
-        return response;
-    }, { port: OZONE_SOCKET_PORT });
 
     // Check for incoming ack and reply as needed
     handler.addReceiver(receiveIncomingAck);
 
     // Add events to the internal emitter (for intent listening)
-    handler.addReceiver(async (_socket, data) => {
-        await intentEmitter.emit(data.intent, data.payload);
+    handler.addReceiver(async (_socket, { payload }) => {
+        // TODO: Promise.all?
+        for (const intent of payload) {
+            await intentEmitter.emit(intent.intent, intent.data)
+        }
     });
+
+    try {
+        // TODO: TLS
+        await http.serve((req) => {
+            // Wait for upgrade
+            if (req.headers.get("upgrade") != "websocket") {
+                return new Response(null, { status: 501 });
+            }
+            // If the upgrade was requested, try and do that
+            const { socket, response } = Deno.upgradeWebSocket(req);
+
+            socket.addEventListener("open", () => {
+                // TODO: Should we handle this case (core should not open more than one socket at a time)
+                if (internal.currentSocket) return;
+                // Set ref
+                internal.currentSocket = socket;
+                // If it's the first time we've connected, our parent needs to resolved while we still run
+                if (!internal.firstConnectionWasEstablished) {
+                    internal.firstConnectionWasEstablished = true;
+                    onInitialConnect();
+                }
+            });
+
+            socket.addEventListener('close', () => {
+                // Unset the currentSocket ref
+                internal.currentSocket = null;
+                // Since we only resolve when the socket closes, this would be now
+                resolveServerPromise(null);
+            });
+
+            // Add receiver
+            socket.addEventListener("message", handler.handleIncomingPayload);
+
+            return response;
+        }, { port: OZONE_SOCKET_PORT })
+    } catch(coreServerError) {
+        // Server failed to bind port, failover will empty promise
+        internal.currentSocket = null;
+        console.error(coreServerError);
+        resolveServerPromise(null);
+        return serverPromise;
+    }
+
+    // TODO: Cleanup on failure (clean up handles and mutable states)
+    // I don't trust GC to do it's job.
 
     return serverPromise;
 }

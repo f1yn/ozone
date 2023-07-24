@@ -8,8 +8,6 @@ const ACK_REPLY_KEY = 'ackReplyKey';
  * @param arterialSocket 
  */
 export function createAckPromise(arterialSocket : WebSocket) {
-    console.log('WAITING FOR ACK')
-
     const ackKey = crypto.randomUUID();
     const [ackPromise, resolveAck] = createFlatPromise<boolean>();
     
@@ -19,7 +17,6 @@ export function createAckPromise(arterialSocket : WebSocket) {
 
         // resolve and unreg this callback
         arterialSocket.removeEventListener('message', waitForAck);
-        console.log('ACK!');
         resolveAck(true);
     }
 

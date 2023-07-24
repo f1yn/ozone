@@ -1,5 +1,8 @@
-import { Artery } from './artery.ts';
-import { log } from './deps.ts';
+import { log } from '@o3/deps.ts';
+import { receiveIncomingAck } from '@o3/common/ack.ts';
+
+import { Artery, ArterialMap } from './artery.ts';
+
 
 /**
  * Shared queue implementation for arterials
@@ -7,8 +10,6 @@ import { log } from './deps.ts';
  * The core uses a queue with a wide arterial map, (routes from any o3 service to any o3 service)
  * The service impl. uses a queue with a single arterial (routes from any o3 service to only the core)
  */
-
-export type ArterialMap = Map<string, Artery | null>
 
 export interface QueueEvent {
     intent: string,
@@ -29,7 +30,7 @@ export function createQueueFromArterialMap({
     initialQueue,
     outgoingEventHandler
 } : QueueConfiguration) {
-    const logger = log.getLogger('event');
+    const logger = log.getLogger('intent');
 
     /// create memory story of incoming/backlogged events
     let queueInOrder = initialQueue || [];
@@ -44,7 +45,7 @@ export function createQueueFromArterialMap({
         while (currentEvent) {
             // get the current exec time
             // const now = new Date();
-            logger.info(`Processing event ${currentEvent.intent} for artery ${currentEvent.arteryName}`);
+            logger.info(`Processing intent ${currentEvent.intent} for artery ${currentEvent.arteryName}`);
 
             // check if this event is a heartbeat (we only send heartbeat as a standalone)
             const eventIsHeartbeat = currentEvent.intent === 'HEARTBEAT';
@@ -81,7 +82,7 @@ export function createQueueFromArterialMap({
             // queue next iteration (loop will bail is currentEventIsNull)
             currentEvent = queueInOrder.pop()!;
         }
-        logger.debug(`Finished processing queue`);
+        logger.info(`Finished processing queue`);
     }
 
     // This handles events originating from services
@@ -113,8 +114,33 @@ export function createQueueFromArterialMap({
         }
     }
 
+    // Services also use similar code, can (should) we consolidate?
+    function addCoreReceivers() {
+        for (const [arteryName, arteryRef] of arteryMap) {
+            logger.info(`Configuring up artery incoming event handler ARTERY=@${arteryName}`)
+            
+            // Skip processing if we get an ACK (that's handled on it's own)
+            arteryRef?.handler.addReceiver(receiveIncomingAck)
+
+            // Add intent processor
+            arteryRef?.handler.addReceiver(async function processIncomingIntent(_socket : WebSocket, { payload } : { payload: QueueEvent[] }) {
+                payload.forEach(intent => incomingEventHandler(arteryRef, intent));
+            });
+        }
+    }
+
+    function createHeartbeat(startInterval: number) {
+        incomingEventHandler(null, { intent: 'HEARTBEAT', arteryName: '*', data: { requestingState: true } });
+
+        setInterval(() => {
+            incomingEventHandler(null, { intent: 'HEARTBEAT', arteryName: '*', data: {} })
+        }, startInterval);   
+    }
+
     return {
         processQueue,
+        addCoreReceivers,
         incomingEventHandler,
+        createHeartbeat,
     }
 }
